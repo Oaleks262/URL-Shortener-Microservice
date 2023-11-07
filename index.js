@@ -4,28 +4,21 @@ const cors = require('cors');
 const app = express();
 const bodyParser = require('body-parser');
 const shortid = require('shortid');
+const dns = require('dns');
 
-// Basic Configuration
 const port = process.env.PORT || 3000;
 
 app.use(cors());
-app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
+
+// Database for storing shortened URLs
+const urlDatabase = [];
 
 app.use('/public', express.static(`${process.cwd()}/public`));
 
 app.get('/', function(req, res) {
   res.sendFile(process.cwd() + '/views/index.html');
 });
-
-// Your first API endpoint
-app.get('/api/hello', function(req, res) {
-  res.json({ greeting: 'hello API' });
-});
-
-// URL shortener
-
-const urlDatabase = [];
 
 app.post('/api/shorturl/new', (req, res) => {
   const originalUrl = req.body.url;
@@ -36,20 +29,29 @@ app.post('/api/shorturl/new', (req, res) => {
     return res.json({ error: 'invalid url' });
   }
 
-  urlDatabase.push({ short_url: id, original_url: originalUrl });
+  const urlObj = new URL(originalUrl);
+  const host = urlObj.hostname;
 
-  res.json({ original_url: originalUrl, short_url: id });
+  dns.lookup(host, (err) => {
+    if (err) {
+      return res.json({ error: 'invalid url' });
+    }
+
+    urlDatabase.push({ short_url: id, original_url: originalUrl });
+
+    res.json({ original_url: originalUrl, short_url: id });
+  });
 });
 
-app.get('/api/shorturl/:short_url', (req, res) => {
-  const shortUrl = req.params.short_url;
-  const entry = urlDatabase.find(item => item.short_url === shortUrl);
+app.get('/api/shorturl/:id', (req, res) => {
+  const id = req.params.id;
+  const urlData = urlDatabase.find(item => item.short_url === id);
 
-  if (!entry) {
-    return res.json({ error: 'short_url not found' });
+  if (urlData) {
+    res.redirect(urlData.original_url);
+  } else {
+    res.json({ error: 'No short URL found for the given input' });
   }
-
-  res.redirect(entry.original_url);
 });
 
 app.listen(port, function() {
